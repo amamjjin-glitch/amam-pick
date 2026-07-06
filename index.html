@@ -45,7 +45,7 @@
   }
   .mono{ font-family: ui-monospace, "SF Mono", Consolas, "Roboto Mono", monospace; }
 
-  #app{ max-width:920px; margin:0 auto; padding:0 0 80px; }
+  #app{ max-width:920px; margin:0 auto; padding:0 0 100px; }
 
   header.top{
     padding:24px 18px 18px;
@@ -179,9 +179,9 @@
   .empty{ font-size:14px; color:var(--ink-soft); padding:14px 0; text-align:center; }
 
   .storebar{
-    position:sticky; bottom:0; background:var(--white); border-top:1px solid var(--line);
+    position:fixed; left:0; right:0; bottom:0; background:var(--white); border-top:1px solid var(--line);
     padding:16px 18px; display:flex; justify-content:space-between; align-items:center;
-    max-width:920px; margin:0 auto;
+    max-width:920px; margin:0 auto; box-shadow:0 -2px 8px rgba(0,0,0,0.06); z-index:30;
   }
   .storebar-info{ display:flex; flex-direction:column; gap:2px; }
   .storebar .lbl{ font-size:13px; color:var(--ink-soft); }
