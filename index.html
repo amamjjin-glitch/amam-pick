@@ -41,6 +41,7 @@
     color:var(--ink);
     font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic","Segoe UI",sans-serif;
     -webkit-font-smoothing:antialiased;
+    overflow-x:hidden;
   }
   .mono{ font-family: ui-monospace, "SF Mono", Consolas, "Roboto Mono", monospace; }
 
@@ -90,6 +91,7 @@
     font-size:14px; font-family:inherit; background:var(--white); color:var(--ink);
   }
   .datebar .label{ font-size:14px; color:var(--ink-soft); }
+  .updated-note{ font-size:12px; color:var(--ink-soft); margin:-10px 0 14px; }
   .pickmeta{ margin-left:auto; display:flex; gap:6px; align-items:center; }
   .pickmeta input{
     border:1px solid var(--line-strong); border-radius:6px; padding:6px 10px;
@@ -181,8 +183,14 @@
     padding:16px 18px; display:flex; justify-content:space-between; align-items:center;
     max-width:920px; margin:0 auto;
   }
+  .storebar-info{ display:flex; flex-direction:column; gap:2px; }
   .storebar .lbl{ font-size:13px; color:var(--ink-soft); }
   .storebar .amt{ font-size:20px; font-weight:800; }
+  .save-btn{
+    border:none; border-radius:8px; background:var(--brand); color:var(--white);
+    font-size:14px; font-weight:700; padding:10px 18px; cursor:pointer; white-space:nowrap;
+  }
+  .save-btn.saved{ background:var(--paper-2); color:var(--ink-soft); cursor:default; }
 
   /* daily report */
   .stamp-total{
@@ -208,23 +216,23 @@
   /* picklist (출고 내역) — 스프레드시트처럼 매장 열이 서로 줄이 맞도록 하나의 그리드로 구성 */
   .picklist-maingrid{
     display:grid; gap:1px; background:var(--line-strong);
-    border:1px solid var(--line-strong); border-radius:8px; overflow-x:auto;
+    border:1px solid var(--line-strong); border-radius:8px; overflow:hidden;
   }
   .picklist-storehead{
     background:var(--paper-2); color:var(--ink); font-weight:800; font-size:14px;
-    padding:13px 8px; text-align:center; white-space:nowrap;
+    padding:13px 8px; text-align:center; word-break:keep-all;
   }
   .picklist-catrow-head{
     grid-column:1 / -1; font-weight:800; font-size:15px; padding:9px 10px 9px 12px;
-    background:var(--white); border-left:3px solid currentColor; white-space:nowrap;
+    background:var(--white); border-left:3px solid currentColor; word-break:keep-all;
   }
   .picklist-cell{
     background:var(--white); font-size:13px; padding:10px 8px; min-height:2.1em;
     display:flex; align-items:center; justify-content:space-between; gap:6px;
   }
-  .picklist-cell span{ white-space:nowrap; }
-  .picklist-desttag{ font-weight:800; font-size:12px; color:var(--ink-soft); white-space:nowrap; }
-  .picklist-subitem{ padding-left:14px; color:var(--ink-soft); white-space:nowrap; }
+  .picklist-cell span{ word-break:keep-all; overflow-wrap:break-word; }
+  .picklist-desttag{ font-weight:800; font-size:12px; color:var(--ink-soft); word-break:keep-all; }
+  .picklist-subitem{ padding-left:14px; color:var(--ink-soft); word-break:keep-all; }
   .picklist-summary{ display:grid; grid-template-columns:repeat(auto-fit, minmax(220px,1fr)); gap:16px; margin-top:20px; }
   .picklist-item{ display:flex; justify-content:space-between; gap:8px; font-size:14px; padding:5px 0; border-bottom:1px dashed var(--line); }
   .picklist-item:last-child{ border-bottom:none; }
@@ -275,6 +283,12 @@
   @media (max-width:480px){
     .item-row{ flex-wrap:wrap; }
     .item-row .name{ flex:1 1 100%; margin-bottom:4px; }
+    main{ padding:16px 6px 0; }
+    .picklist-storehead{ font-size:11px; padding:8px 3px; }
+    .picklist-catrow-head{ font-size:12px; padding:7px 6px 7px 8px; }
+    .picklist-cell{ font-size:10px; padding:6px 3px; gap:2px; min-height:1.8em; }
+    .picklist-desttag{ font-size:10px; }
+    .picklist-subitem{ padding-left:6px; font-size:10px; }
   }
 </style>
 </head>
@@ -331,10 +345,15 @@ window.storage = {
   async get(key){
     const snap = await db.collection('kv').doc(key).get();
     if(!snap.exists) throw new Error('not found');
-    return {value: snap.data().value};
+    const data = snap.data();
+    return {value: data.value, updatedBy: data.updatedBy||null, updatedAt: data.updatedAt||null};
   },
   async set(key, value){
-    await db.collection('kv').doc(key).set({value});
+    await db.collection('kv').doc(key).set({
+      value,
+      updatedBy: (auth.currentUser && auth.currentUser.email) || null,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
   },
   async list(prefix){
     const snap = await db.collection('kv')
@@ -406,6 +425,12 @@ function todayStr(d){ d=d||new Date(); const y=d.getFullYear(), m=String(d.getMo
 function parseDate(s){ const [y,m,d]=s.split('-').map(Number); return new Date(y, m-1, d); }
 function fmtWon(n){ return (n||0).toLocaleString('ko-KR'); }
 function fmtDateLabel(s){ const d=parseDate(s); const days=['일','월','화','수','목','금','토']; return `${d.getMonth()+1}월 ${d.getDate()}일 (${days[d.getDay()]})`; }
+function fmtUpdated(meta){
+  if(!meta || !meta.updatedBy) return '';
+  const d = meta.updatedAt && meta.updatedAt.toDate ? meta.updatedAt.toDate() : (meta.updatedAt instanceof Date ? meta.updatedAt : null);
+  const timeStr = d ? d.toLocaleString('ko-KR', {month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'}) : '';
+  return `최근 수정: ${esc(meta.updatedBy)}${timeStr ? ' · '+timeStr : ''}`;
+}
 function getMonday(d){ const date=new Date(d); const day=date.getDay(); const diff=date.getDate()-day+(day===0?-6:1); return new Date(date.getFullYear(),date.getMonth(),diff); }
 function addDays(d,n){ const nd=new Date(d); nd.setDate(nd.getDate()+n); return nd; }
 function showToast(msg){
@@ -417,8 +442,8 @@ const state = {
   catalog: null,
   user: null,
   tab: 'entry',
-  entry: { store: STORES[0], date: todayStr(), cat: 'salad', order: {}, canTransfer: {out:{}, in:{}} },
-  daily: { date: todayStr(), data: null, meta: {author:'', time:''}, canTransfer: {out:{}, in:{}}, loading:false },
+  entry: { store: STORES[0], date: todayStr(), cat: 'salad', order: {}, canTransfer: {out:{}, in:{}}, orderMeta: null, confirmed: false, cookieAggregate: null },
+  daily: { date: todayStr(), data: null, meta: {author:'', time:''}, canTransfer: {out:{}, in:{}}, cookieTransfer: {out:{}, in:{}}, loading:false },
   stats: { mode:'week', anchor: todayStr(), store:'all', data: null, loading:false },
 };
 
@@ -448,8 +473,33 @@ async function loadOrder(store, date){
     return JSON.parse(res.value);
   }catch(e){ return {}; }
 }
+async function loadOrderMeta(store, date){
+  try{
+    const res = await window.storage.get(`order:${store}:${date}`);
+    return {updatedBy: res.updatedBy, updatedAt: res.updatedAt};
+  }catch(e){ return null; }
+}
+async function loadConfirmed(store, date){
+  try{ const res = await window.storage.get(`order_confirmed:${store}:${date}`); return res.value === '1'; }
+  catch(e){ return false; }
+}
+async function saveConfirmed(store, date, val){
+  try{ await window.storage.set(`order_confirmed:${store}:${date}`, val ? '1' : '0'); }catch(e){}
+}
+async function guardConfirmedEdit(){
+  if(!state.entry.confirmed) return true;
+  if(!confirm('이미 저장된 발주입니다. 변경하시겠습니까?')) return false;
+  state.entry.confirmed = false;
+  await saveConfirmed(state.entry.store, state.entry.date, false);
+  return true;
+}
 async function saveOrder(store, date, orderObj){
-  try{ await window.storage.set(`order:${store}:${date}`, JSON.stringify(orderObj), true); }
+  try{
+    await window.storage.set(`order:${store}:${date}`, JSON.stringify(orderObj), true);
+    if(store===state.entry.store && date===state.entry.date){
+      state.entry.orderMeta = {updatedBy: state.user.email, updatedAt: new Date()};
+    }
+  }
   catch(e){ showToast('저장 실패, 다시 시도해주세요'); }
 }
 // ---------- calculations ----------
@@ -485,6 +535,9 @@ async function switchEntryDate(store, date){
   if(storeChanged){ state.catalog = await loadCatalog(store); }
   if(dateChanged){ state.entry.canTransfer = await loadCanTransfer(date); }
   state.entry.order = await loadOrder(store, date);
+  state.entry.orderMeta = await loadOrderMeta(store, date);
+  state.entry.confirmed = await loadConfirmed(store, date);
+  state.entry.cookieAggregate = store==='서소문점' ? await loadCookieAggregate(date) : null;
   render();
 }
 function digitsOnly(v){ return String(v||'').replace(/[^\d]/g,''); }
@@ -620,6 +673,25 @@ function renderEntry(main){
       ${entryCanCard('in', '캔 입고 (광화문·서소문·제조실 입고)')}
     </div>` : '';
 
+  const cookieAggSection = state.entry.cookieAggregate ? `
+    <div class="card">
+      <div class="cardhead"><h2 style="color:var(--c-cookie)">전 지점 쿠키 발주 합계</h2></div>
+      ${STORES.map(s=>{
+        const storeData = state.entry.cookieAggregate.perStore[s];
+        const itemLines = storeData.items.length>0
+          ? storeData.items.map(([name,qty])=>`<div class="picklist-item"><span class="picklist-subitem">${esc(name)}</span><span class="mono">${qty}</span></div>`).join('')
+          : `<div class="empty">발주 없음</div>`;
+        return `
+          <div class="transfer-dest-block">
+            <div class="transfer-dest-head">${esc(s)} (${storeData.total}개)</div>
+            ${itemLines}
+          </div>`;
+      }).join('')}
+      <div class="picklist-item" style="font-weight:800; border-top:1px solid var(--line); padding-top:8px; margin-top:4px;">
+        <span>총합</span><span class="mono">${state.entry.cookieAggregate.grand}</span>
+      </div>
+    </div>` : '';
+
   main.innerHTML = `
     <div class="pillrow" id="storePills">
       ${STORES.map(s=>`<button class="pill ${s===state.entry.store?'active':''}" data-store="${escAttr(s)}">${esc(s)}</button>`).join('')}
@@ -630,16 +702,28 @@ function renderEntry(main){
       <button class="nav" id="dNext">›</button>
       <span class="label">${fmtDateLabel(state.entry.date)}</span>
     </div>
+    ${state.entry.orderMeta && state.entry.orderMeta.updatedBy ? `<div class="updated-note">${fmtUpdated(state.entry.orderMeta)}</div>` : ''}
     <div class="cattabs" id="catTabs">
       ${entryCats.map(c=>`<div class="cattab" style="background:${c.bg}; color:${c.color}" data-cat="${c.key}">${c.label}</div>`).join('')}
     </div>
     ${sections}
+    ${cookieAggSection}
     ${canSection}
     <div class="storebar">
-      <span class="lbl">${esc(state.entry.store)} · ${fmtDateLabel(state.entry.date)} 발주 합계</span>
-      <span class="amt mono">${fmtWon(total)}원</span>
+      <div class="storebar-info">
+        <span class="lbl">${esc(state.entry.store)} · ${fmtDateLabel(state.entry.date)} 발주 합계</span>
+        <span class="amt mono">${fmtWon(total)}원</span>
+      </div>
+      <button id="confirmSaveBtn" class="save-btn ${state.entry.confirmed?'saved':''}">${state.entry.confirmed ? '저장됨 ✓' : '저장'}</button>
     </div>
   `;
+  document.getElementById('confirmSaveBtn').onclick = async ()=>{
+    if(state.entry.confirmed) return;
+    state.entry.confirmed = true;
+    await saveConfirmed(state.entry.store, state.entry.date, true);
+    showToast('발주가 저장되었습니다');
+    render();
+  };
   main.querySelectorAll('.entry-can-input').forEach(inp=>{
     inp.onchange = ()=>{
       const dir = inp.dataset.dir, dest = inp.dataset.dest;
@@ -677,6 +761,7 @@ function renderEntry(main){
         const itemInput = row.querySelector('.transfer-item-input');
         const unitInput = row.querySelector('.unit-input');
         const commit = async ()=>{
+          if(!(await guardConfirmedEdit())){ render(); return; }
           const qty = Math.max(0, parseInt(qtyInput.value)||0);
           const item = itemInput.value.trim();
           const unit = unitInput.value.trim();
@@ -692,6 +777,7 @@ function renderEntry(main){
         itemInput.onchange = commit;
         unitInput.onchange = commit;
         row.querySelector('.del-transfer-item').onclick = async ()=>{
+          if(!(await guardConfirmedEdit())){ render(); return; }
           state.entry.order[catKey][dest].splice(idx,1);
           await saveOrder(state.entry.store, state.entry.date, state.entry.order);
           render();
@@ -699,6 +785,7 @@ function renderEntry(main){
       });
       section.querySelectorAll('.addTransferItemBtn').forEach(btn=>{
         btn.onclick = async ()=>{
+          if(!(await guardConfirmedEdit())){ render(); return; }
           const dest = btn.dataset.dest;
           if(!state.entry.order[catKey]) state.entry.order[catKey] = {};
           if(!state.entry.order[catKey][dest]) state.entry.order[catKey][dest] = [];
@@ -716,6 +803,7 @@ function renderEntry(main){
       const priceInput = row.querySelector('.price-input');
       const unitInput = row.querySelector('.unit-input');
       const commit = async ()=>{
+        if(!(await guardConfirmedEdit())){ render(); return; }
         const qty = Math.max(0, parseInt(qtyInput.value)||0);
         if(!state.entry.order[catKey]) state.entry.order[catKey] = {};
         if(field==='unit'){
@@ -756,6 +844,7 @@ function renderEntry(main){
       if(unitInput) unitInput.onchange = commit;
       row.querySelector('.del-item').onclick = async ()=>{
         if(!confirm(`'${name}' 품목을 목록에서 삭제할까요?`)) return;
+        if(!(await guardConfirmedEdit())){ render(); return; }
         state.catalog[catKey] = state.catalog[catKey].filter(x=>x.name!==name);
         await saveCatalog();
         if(state.entry.order[catKey]) delete state.entry.order[catKey][name];
@@ -795,6 +884,30 @@ async function loadCanTransfer(date){
 async function saveCanTransfer(date, val){
   try{ await window.storage.set(`can_transfer:${date}`, JSON.stringify(val), true); }catch(e){}
 }
+const COOKIE_DESTS = ['서울점','광화문점','문래점'];
+async function loadCookieTransfer(date){
+  try{
+    const res = await window.storage.get(`cookie_transfer:${date}`, true);
+    return JSON.parse(res.value);
+  }catch(e){ return {out:{}, in:{}}; }
+}
+async function saveCookieTransfer(date, val){
+  try{ await window.storage.set(`cookie_transfer:${date}`, JSON.stringify(val), true); }catch(e){}
+}
+async function loadCookieAggregate(date){
+  const perStore = {};
+  await Promise.all(STORES.map(async s=>{
+    const order = await loadOrder(s, date);
+    const cookieItems = order['cookie'] || {};
+    const items = Object.entries(cookieItems)
+      .filter(([,rec])=>(rec.qty||0)>0)
+      .map(([name,rec])=>[name, Number(rec.qty)||0]);
+    const total = items.reduce((sum,[,qty])=>sum+qty, 0);
+    perStore[s] = {items, total};
+  }));
+  const grand = Object.values(perStore).reduce((sum,s)=>sum+s.total, 0);
+  return {perStore, grand};
+}
 async function loadDailyData(date){
   state.daily.loading = true; render();
   const results = {};
@@ -804,6 +917,7 @@ async function loadDailyData(date){
   state.daily.data = results;
   state.daily.meta = await loadPickMeta(date);
   state.daily.canTransfer = await loadCanTransfer(date);
+  state.daily.cookieTransfer = await loadCookieTransfer(date);
   state.daily.loading = false;
   render();
 }
@@ -1081,6 +1195,23 @@ function renderPicklist(main){
       </div>`;
   };
 
+  const cookieTransfer = state.daily.cookieTransfer || {out:{}, in:{}};
+  const cookieTransferCard = (dir, label)=>{
+    const vals = cookieTransfer[dir] || {};
+    return `
+    <div class="card">
+      <div class="cardhead"><h2 style="color:var(--c-cookie)">${esc(label)}</h2></div>
+      ${COOKIE_DESTS.map(dest=>`
+        <div class="picklist-item">
+          <span>${esc(dest)}</span>
+          <span class="canbox">
+            <input type="number" min="0" class="cookie-transfer-input" data-dir="${dir}" data-dest="${escAttr(dest)}" value="${vals[dest]||0}">
+            <span class="unit-label">개</span>
+          </span>
+        </div>`).join('')}
+    </div>`;
+  };
+
   // 서울 창고 결제요청 / 제조실 결제요청 — 지점별로 나누지 않고 해당 매장 데이터만 하나의 카드로 표시
   const storeCategoryCard = (storeKey, catKey, label)=>{
     const cat = CATS.find(c=>c.key===catKey);
@@ -1099,7 +1230,7 @@ function renderPicklist(main){
   };
 
   body.innerHTML = `
-    <div class="picklist-maingrid" style="grid-template-columns:repeat(${STORES.length}, minmax(112px, 1fr))">${gridCells.join('')}</div>
+    <div class="picklist-maingrid" style="grid-template-columns:repeat(${STORES.length}, 1fr)">${gridCells.join('')}</div>
     ${storeCategoryCard('서울점', 'seoulwarehouse', '서울 창고 결제요청')}
     ${storeCategoryCard('제조실점', 'payment', '제조실 결제요청')}
     <div class="picklist-summary">
@@ -1110,7 +1241,24 @@ function renderPicklist(main){
       ${canCard('out', '캔 출고 (서울점 출고)')}
       ${canCard('in', '캔 입고 (광화문·서소문·제조실 입고)')}
     </div>
+    <div class="picklist-summary">
+      ${cookieTransferCard('out', '쿠키 출고 (서소문점 출고)')}
+      ${cookieTransferCard('in', '쿠키 입고 (서울·광화문·문래 입고)')}
+    </div>
   `;
+  body.querySelectorAll('.cookie-transfer-input').forEach(inp=>{
+    inp.onchange = ()=>{
+      const dir = inp.dataset.dir, dest = inp.dataset.dest;
+      const val = Math.max(0, parseInt(inp.value)||0);
+      state.daily.cookieTransfer = state.daily.cookieTransfer || {out:{}, in:{}};
+      if(!state.daily.cookieTransfer.out) state.daily.cookieTransfer.out = {};
+      if(!state.daily.cookieTransfer.in) state.daily.cookieTransfer.in = {};
+      state.daily.cookieTransfer[dir][dest] = val;
+      if(dir==='out'){ state.daily.cookieTransfer.in[dest] = val; }
+      saveCookieTransfer(state.daily.date, state.daily.cookieTransfer);
+      render();
+    };
+  });
   body.querySelectorAll('.can-input').forEach(inp=>{
     inp.onchange = ()=>{
       const dir = inp.dataset.dir, dest = inp.dataset.dest;
@@ -1322,12 +1470,19 @@ auth.onAuthStateChanged(async (fbUser)=>{
     await auth.signOut();
     return;
   }
-  state.user = { email: fbUser.email, role: profile.role, store: profile.store };
+  state.user = {
+    email: fbUser.email,
+    role: String(profile.role||'').trim().toLowerCase(),
+    store: String(profile.store||'').trim()
+  };
   lockScreen.style.display = 'none';
   app.style.display = '';
   applyRoleRestrictions();
   state.catalog = await loadCatalog(state.entry.store);
   state.entry.order = await loadOrder(state.entry.store, state.entry.date);
+  state.entry.orderMeta = await loadOrderMeta(state.entry.store, state.entry.date);
+  state.entry.confirmed = await loadConfirmed(state.entry.store, state.entry.date);
+  state.entry.cookieAggregate = state.entry.store==='서소문점' ? await loadCookieAggregate(state.entry.date) : null;
   state.entry.canTransfer = await loadCanTransfer(state.entry.date);
   render();
 });
