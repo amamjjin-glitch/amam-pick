@@ -99,7 +99,7 @@
   }
   .pickmeta input[type=text]{ width:100px; }
   .canbox{ display:flex; align-items:center; gap:5px; }
-  .canbox .can-input{
+  .canbox input{
     width:56px; text-align:right; border:1px solid var(--line-strong); border-radius:6px;
     padding:5px 6px; font-size:14px; font-family:inherit;
   }
@@ -676,7 +676,7 @@ function renderEntry(main){
   const cookieAggSection = state.entry.cookieAggregate ? `
     <div class="card">
       <div class="cardhead"><h2 style="color:var(--c-cookie)">전 지점 쿠키 발주 합계</h2></div>
-      ${STORES.map(s=>{
+      ${STORES.filter(s=>s!=='제조실점').map(s=>{
         const storeData = state.entry.cookieAggregate.perStore[s];
         const itemLines = storeData.items.length>0
           ? storeData.items.map(([name,qty])=>`<div class="picklist-item"><span class="picklist-subitem">${esc(name)}</span><span class="mono">${qty}</span></div>`).join('')
@@ -896,7 +896,7 @@ async function saveCookieTransfer(date, val){
 }
 async function loadCookieAggregate(date){
   const perStore = {};
-  await Promise.all(STORES.map(async s=>{
+  await Promise.all(STORES.filter(s=>s!=='제조실점').map(async s=>{
     const order = await loadOrder(s, date);
     const cookieItems = order['cookie'] || {};
     const items = Object.entries(cookieItems)
@@ -1200,7 +1200,7 @@ function renderPicklist(main){
     const vals = cookieTransfer[dir] || {};
     return `
     <div class="card">
-      <div class="cardhead"><h2 style="color:var(--c-cookie)">${esc(label)}</h2></div>
+      <div class="cardhead"><h2>${esc(label)}</h2></div>
       ${COOKIE_DESTS.map(dest=>`
         <div class="picklist-item">
           <span>${esc(dest)}</span>
