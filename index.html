@@ -109,6 +109,14 @@
   }
   .close-btn.is-closed{ background:var(--paper-2); color:var(--ink-soft); border-color:var(--line-strong); }
   .close-badge{ font-size:13px; font-weight:700; color:#B23B3B; }
+  .print-btn{
+    border:1px solid var(--line-strong); border-radius:6px; padding:6px 12px; font-size:13px;
+    font-weight:700; font-family:inherit; background:var(--white); color:var(--ink); cursor:pointer;
+  }
+  .print-only{ display:none; }
+  .print-header{ margin:4px 0 14px; }
+  .print-title{ font-size:18px; font-weight:800; }
+  .print-sub{ font-size:13px; color:var(--ink-soft); margin-top:4px; }
   .canbox{ display:flex; align-items:center; gap:5px; }
   .canbox input{
     width:56px; text-align:right; border:1px solid var(--line-strong); border-radius:6px;
@@ -296,7 +304,6 @@
   }
 
   @media (max-width:480px){
-    #app{ zoom:0.9; }
     .item-row{ flex-wrap:wrap; row-gap:8px; }
     .item-row .name{ flex:1 1 100%; margin-bottom:4px; }
     .qtybox input{ width:150px; font-size:16px; }
@@ -309,6 +316,19 @@
     .picklist-cell{ font-size:10px; padding:6px 3px; gap:2px; min-height:1.8em; }
     .picklist-desttag{ font-size:10px; }
     .picklist-subitem{ padding-left:6px; font-size:10px; }
+  }
+
+  @media print{
+    header.top, nav.tabs, .datebar, .print-btn, .toast, #lockScreen{ display:none !important; }
+    body{ background:#fff; }
+    #app{ max-width:none; padding:0; }
+    main{ padding:0; }
+    .print-only{ display:block; }
+    .picklist-storehead{ font-size:13px; }
+    .picklist-catrow-head{ font-size:13px; }
+    .picklist-cell{ font-size:12px; }
+    .picklist-subitem{ font-size:11px; }
+    .card, .canbox, .picklist-maingrid, .transfer-dest-block{ break-inside:avoid; }
   }
 </style>
 </head>
@@ -1048,10 +1068,16 @@ function renderPicklist(main){
         ${canManageClose()
           ? `<button id="closeToggleBtn" class="close-btn ${meta.closed?'is-closed':''}">${meta.closed ? '마감 취소' : '마감'}</button>`
           : (meta.closed ? `<span class="close-badge">🔒 마감됨</span>` : '')}
+        <button id="printBtn" class="print-btn">🖨 인쇄</button>
       </div>
+    </div>
+    <div class="print-only print-header">
+      <div class="print-title">${fmtDateLabel(state.daily.date)} 출고 내역</div>
+      <div class="print-sub">작성자: ${esc(meta.author||'-')} · 마감시간: ${esc(meta.time||'-')}</div>
     </div>
     <div id="picklistBody"></div>
   `;
+  document.getElementById('printBtn').onclick = ()=> window.print();
   document.getElementById('dPick').onchange = (e)=>{ state.daily.date=e.target.value; state.daily.data=null; render(); };
   document.getElementById('dPrev').onclick = ()=>{ state.daily.date=todayStr(addDays(parseDate(state.daily.date),-1)); state.daily.data=null; render(); };
   document.getElementById('dNext').onclick = ()=>{ state.daily.date=todayStr(addDays(parseDate(state.daily.date),1)); state.daily.data=null; render(); };
