@@ -93,12 +93,22 @@
   }
   .datebar .label{ font-size:14px; color:var(--ink-soft); }
   .updated-note{ font-size:12px; color:var(--ink-soft); margin:-10px 0 14px; }
+  .closed-banner{
+    background:#FDECEC; color:#B23B3B; border:1px solid #F3C4C4; border-radius:8px;
+    padding:10px 14px; font-size:13px; font-weight:600; margin:-6px 0 14px;
+  }
   .pickmeta{ margin-left:auto; display:flex; gap:6px; align-items:center; }
   .pickmeta input{
     border:1px solid var(--line-strong); border-radius:6px; padding:6px 10px;
     font-size:13px; font-family:inherit; background:var(--white); color:var(--ink);
   }
   .pickmeta input[type=text]{ width:100px; }
+  .close-btn{
+    border:1px solid #B23B3B; border-radius:6px; padding:6px 12px; font-size:13px;
+    font-weight:700; font-family:inherit; background:#FDECEC; color:#B23B3B; cursor:pointer;
+  }
+  .close-btn.is-closed{ background:var(--paper-2); color:var(--ink-soft); border-color:var(--line-strong); }
+  .close-badge{ font-size:13px; font-weight:700; color:#B23B3B; }
   .canbox{ display:flex; align-items:center; gap:5px; }
   .canbox input{
     width:56px; text-align:right; border:1px solid var(--line-strong); border-radius:6px;
@@ -289,7 +299,7 @@
     #app{ zoom:0.9; }
     .item-row{ flex-wrap:wrap; row-gap:8px; }
     .item-row .name{ flex:1 1 100%; margin-bottom:4px; }
-    .qtybox input{ width:52px; font-size:16px; }
+    .qtybox input{ width:150px; font-size:16px; }
     .pricebox, .unitbox, .destbox{ margin-left:auto; }
     .pricebox input, .unitbox input, .destbox input{ width:118px; font-size:16px; }
     .linetotal{ width:auto; min-width:70px; font-size:15px; }
@@ -374,6 +384,11 @@ window.storage = {
   }
 };
 const STORES = ['서울점','서소문점','광화문점','문래점','제조실점'];
+const CLOSE_ADMINS = ['oneday@amam.pick'];
+const FULL_ACCESS_OVERRIDE = ['oneday@amam.pick'];
+function canManageClose(){
+  return !!(state.user && CLOSE_ADMINS.includes(String(state.user.email||'').trim().toLowerCase()));
+}
 const CATS = [
   {key:'salad', label:'샐러드 발주', color:'var(--c-salad)', bg:'var(--c-salad-bg)'},
   {key:'costco', label:'코스트코 발주', color:'var(--c-costco)', bg:'var(--c-costco-bg)'},
@@ -452,8 +467,8 @@ const state = {
   catalog: null,
   user: null,
   tab: 'entry',
-  entry: { store: STORES[0], date: todayStr(), cat: 'salad', order: {}, canTransfer: {out:{}, in:{}}, orderMeta: null, confirmed: false, cookieAggregate: null },
-  daily: { date: todayStr(), data: null, meta: {author:'', time:''}, canTransfer: {out:{}, in:{}}, cookieTransfer: {out:{}, in:{}}, loading:false },
+  entry: { store: STORES[0], date: todayStr(), cat: 'salad', order: {}, canTransfer: {out:{}, in:{}}, orderMeta: null, dirty: false, cookieAggregate: null, closed: false },
+  daily: { date: todayStr(), data: null, meta: {author:'', time:'', closed:false}, canTransfer: {out:{}, in:{}}, cookieTransfer: {out:{}, in:{}}, loading:false },
   stats: { mode:'week', anchor: todayStr(), store:'all', data: null, loading:false },
 };
 
@@ -489,18 +504,18 @@ async function loadOrderMeta(store, date){
     return {updatedBy: res.updatedBy, updatedAt: res.updatedAt};
   }catch(e){ return null; }
 }
-async function loadConfirmed(store, date){
-  try{ const res = await window.storage.get(`order_confirmed:${store}:${date}`); return res.value === '1'; }
-  catch(e){ return false; }
+function markDirty(){
+  state.entry.dirty = true;
 }
-async function saveConfirmed(store, date, val){
-  try{ await window.storage.set(`order_confirmed:${store}:${date}`, val ? '1' : '0'); }catch(e){}
-}
-async function guardConfirmedEdit(){
-  if(!state.entry.confirmed) return true;
-  if(!confirm('이미 저장된 발주입니다. 변경하시겠습니까?')) return false;
-  state.entry.confirmed = false;
-  await saveConfirmed(state.entry.store, state.entry.date, false);
+window.addEventListener('beforeunload', (e)=>{
+  if(state.entry.dirty){ e.preventDefault(); e.returnValue = ''; }
+});
+function checkNotClosed(){
+  if(state.entry.closed){
+    alert('이미 마감이 되었습니다. 발주를 변경하려면 출고내역에서 마감 취소를 눌러주세요.');
+    render();
+    return false;
+  }
   return true;
 }
 async function saveOrder(store, date, orderObj){
@@ -546,6 +561,7 @@ function render(){
 
 // ---------- ENTRY TAB ----------
 async function switchEntryDate(store, date){
+  if(state.entry.dirty && !confirm('저장하지 않은 변경사항이 있습니다. 저장하지 않고 이동하시겠습니까?')) return;
   const storeChanged = store !== state.entry.store;
   const dateChanged = date !== state.entry.date;
   state.entry.store = store; state.entry.date = date;
@@ -553,7 +569,8 @@ async function switchEntryDate(store, date){
   if(dateChanged){ state.entry.canTransfer = await loadCanTransfer(date); }
   state.entry.order = await loadOrder(store, date);
   state.entry.orderMeta = await loadOrderMeta(store, date);
-  state.entry.confirmed = await loadConfirmed(store, date);
+  state.entry.dirty = false;
+  state.entry.closed = (await loadPickMeta(date)).closed;
   state.entry.cookieAggregate = store==='서소문점' ? await loadCookieAggregate(date) : null;
   render();
 }
@@ -720,6 +737,7 @@ function renderEntry(main){
       <span class="label">${fmtDateLabel(state.entry.date)}</span>
     </div>
     ${state.entry.orderMeta && state.entry.orderMeta.updatedBy ? `<div class="updated-note">${fmtUpdated(state.entry.orderMeta)}</div>` : ''}
+    ${state.entry.closed ? `<div class="closed-banner">🔒 이 날짜는 마감되었습니다. 추가 발주가 필요하면 출고내역에서 마감 취소를 눌러주세요.</div>` : ''}
     <div class="cattabs" id="catTabs">
       ${entryCats.map(c=>`<div class="cattab" style="background:${c.bg}; color:${c.color}" data-cat="${c.key}">${c.label}</div>`).join('')}
     </div>
@@ -731,13 +749,14 @@ function renderEntry(main){
         <span class="lbl">${esc(state.entry.store)} · ${fmtDateLabel(state.entry.date)} 발주 합계</span>
         <span class="amt mono">${fmtWon(total)}원</span>
       </div>
-      <button id="confirmSaveBtn" class="save-btn ${state.entry.confirmed?'saved':''}">${state.entry.confirmed ? '저장됨 ✓' : '저장'}</button>
+      <button id="confirmSaveBtn" class="save-btn ${(!state.entry.dirty||state.entry.closed)?'saved':''}">${state.entry.closed ? '마감됨 🔒' : (state.entry.dirty ? '저장' : '저장됨 ✓')}</button>
     </div>
   `;
   document.getElementById('confirmSaveBtn').onclick = async ()=>{
-    if(state.entry.confirmed) return;
-    state.entry.confirmed = true;
-    await saveConfirmed(state.entry.store, state.entry.date, true);
+    if(!state.entry.dirty) return;
+    if(!checkNotClosed()) return;
+    await saveOrder(state.entry.store, state.entry.date, state.entry.order);
+    state.entry.dirty = false;
     showToast('발주가 저장되었습니다');
     render();
   };
@@ -777,15 +796,15 @@ function renderEntry(main){
         const qtyInput = row.querySelector('.qty-input');
         const itemInput = row.querySelector('.transfer-item-input');
         const unitInput = row.querySelector('.unit-input');
-        const commit = async ()=>{
-          if(!(await guardConfirmedEdit())){ render(); return; }
+        const commit = ()=>{
+          if(!checkNotClosed()) return;
           const qty = Math.max(0, parseInt(qtyInput.value)||0);
           const item = itemInput.value.trim();
           const unit = unitInput.value.trim();
           if(!state.entry.order[catKey]) state.entry.order[catKey] = {};
           if(!state.entry.order[catKey][dest]) state.entry.order[catKey][dest] = [];
           state.entry.order[catKey][dest][idx] = {item, qty, unit};
-          await saveOrder(state.entry.store, state.entry.date, state.entry.order);
+          markDirty();
           render();
         };
         row.querySelector('.qty-inc').onclick = ()=>{ qtyInput.value = (parseInt(qtyInput.value)||0)+1; commit(); };
@@ -793,21 +812,21 @@ function renderEntry(main){
         qtyInput.onchange = commit;
         itemInput.onchange = commit;
         unitInput.onchange = commit;
-        row.querySelector('.del-transfer-item').onclick = async ()=>{
-          if(!(await guardConfirmedEdit())){ render(); return; }
+        row.querySelector('.del-transfer-item').onclick = ()=>{
+          if(!checkNotClosed()) return;
           state.entry.order[catKey][dest].splice(idx,1);
-          await saveOrder(state.entry.store, state.entry.date, state.entry.order);
+          markDirty();
           render();
         };
       });
       section.querySelectorAll('.addTransferItemBtn').forEach(btn=>{
-        btn.onclick = async ()=>{
-          if(!(await guardConfirmedEdit())){ render(); return; }
+        btn.onclick = ()=>{
+          if(!checkNotClosed()) return;
           const dest = btn.dataset.dest;
           if(!state.entry.order[catKey]) state.entry.order[catKey] = {};
           if(!state.entry.order[catKey][dest]) state.entry.order[catKey][dest] = [];
           state.entry.order[catKey][dest].push({item:'', qty:0, unit:''});
-          await saveOrder(state.entry.store, state.entry.date, state.entry.order);
+          markDirty();
           render();
         };
       });
@@ -820,7 +839,7 @@ function renderEntry(main){
       const priceInput = row.querySelector('.price-input');
       const unitInput = row.querySelector('.unit-input');
       const commit = async ()=>{
-        if(!(await guardConfirmedEdit())){ render(); return; }
+        if(!checkNotClosed()) return;
         const qty = Math.max(0, parseInt(qtyInput.value)||0);
         if(!state.entry.order[catKey]) state.entry.order[catKey] = {};
         if(field==='unit'){
@@ -845,7 +864,7 @@ function renderEntry(main){
           const catItem = state.catalog[catKey].find(x=>x.name===name);
           if(catItem && catItem.price !== price){ catItem.price = price; await saveCatalog(); }
         }
-        await saveOrder(state.entry.store, state.entry.date, state.entry.order);
+        markDirty();
         render();
       };
       row.querySelector('.qty-inc').onclick = ()=>{ qtyInput.value = (parseInt(qtyInput.value)||0)+1; commit(); };
@@ -861,11 +880,11 @@ function renderEntry(main){
       if(unitInput) unitInput.onchange = commit;
       row.querySelector('.del-item').onclick = async ()=>{
         if(!confirm(`'${name}' 품목을 목록에서 삭제할까요?`)) return;
-        if(!(await guardConfirmedEdit())){ render(); return; }
+        if(!checkNotClosed()) return;
         state.catalog[catKey] = state.catalog[catKey].filter(x=>x.name!==name);
         await saveCatalog();
         if(state.entry.order[catKey]) delete state.entry.order[catKey][name];
-        await saveOrder(state.entry.store, state.entry.date, state.entry.order);
+        markDirty();
         render();
       };
     });
@@ -885,8 +904,8 @@ function renderEntry(main){
 
 // ---------- DAILY REPORT TAB ----------
 async function loadPickMeta(date){
-  try{ const res = await window.storage.get(`picklist_meta:${date}`, true); return JSON.parse(res.value); }
-  catch(e){ return {author:'', time:''}; }
+  try{ const res = await window.storage.get(`picklist_meta:${date}`, true); const meta = JSON.parse(res.value); meta.closed = !!meta.closed; return meta; }
+  catch(e){ return {author:'', time:'', closed:false}; }
 }
 async function savePickMeta(date, meta){
   try{ await window.storage.set(`picklist_meta:${date}`, JSON.stringify(meta), true); }catch(e){}
@@ -1016,7 +1035,7 @@ function detailLines(storeOrder){
 // ---------- PICKLIST (출고 내역) TAB ----------
 function renderPicklist(main){
   if(state.daily.data===null && !state.daily.loading){ loadDailyData(state.daily.date); }
-  const meta = state.daily.meta || {author:'', time:''};
+  const meta = state.daily.meta || {author:'', time:'', closed:false};
   main.innerHTML = `
     <div class="datebar">
       <button class="nav" id="dPrev">‹</button>
@@ -1026,6 +1045,9 @@ function renderPicklist(main){
       <div class="pickmeta">
         <input type="text" id="pickAuthor" placeholder="작성자" value="${escAttr(meta.author||'')}">
         <input type="time" id="pickTime" value="${escAttr(meta.time||'')}">
+        ${canManageClose()
+          ? `<button id="closeToggleBtn" class="close-btn ${meta.closed?'is-closed':''}">${meta.closed ? '마감 취소' : '마감'}</button>`
+          : (meta.closed ? `<span class="close-badge">🔒 마감됨</span>` : '')}
       </div>
     </div>
     <div id="picklistBody"></div>
@@ -1034,14 +1056,26 @@ function renderPicklist(main){
   document.getElementById('dPrev').onclick = ()=>{ state.daily.date=todayStr(addDays(parseDate(state.daily.date),-1)); state.daily.data=null; render(); };
   document.getElementById('dNext').onclick = ()=>{ state.daily.date=todayStr(addDays(parseDate(state.daily.date),1)); state.daily.data=null; render(); };
   document.getElementById('pickAuthor').onchange = (e)=>{
-    state.daily.meta = state.daily.meta || {author:'', time:''};
+    state.daily.meta = state.daily.meta || {author:'', time:'', closed:false};
     state.daily.meta.author = e.target.value;
     savePickMeta(state.daily.date, state.daily.meta);
   };
   document.getElementById('pickTime').onchange = (e)=>{
-    state.daily.meta = state.daily.meta || {author:'', time:''};
+    state.daily.meta = state.daily.meta || {author:'', time:'', closed:false};
     state.daily.meta.time = e.target.value;
     savePickMeta(state.daily.date, state.daily.meta);
+  };
+  const closeToggleBtn = document.getElementById('closeToggleBtn');
+  if(closeToggleBtn) closeToggleBtn.onclick = async ()=>{
+    if(!canManageClose()) return;
+    state.daily.meta = state.daily.meta || {author:'', time:'', closed:false};
+    const willClose = !state.daily.meta.closed;
+    if(willClose && !confirm(`${fmtDateLabel(state.daily.date)} 발주를 마감할까요? 마감 후에는 발주 입력에서 추가 발주가 불가능합니다.`)) return;
+    if(!willClose && !confirm(`${fmtDateLabel(state.daily.date)} 마감을 취소할까요? 취소하면 다시 발주를 추가/변경할 수 있습니다.`)) return;
+    state.daily.meta.closed = willClose;
+    await savePickMeta(state.daily.date, state.daily.meta);
+    if(state.daily.date === state.entry.date) state.entry.closed = willClose;
+    render();
   };
 
   const body = document.getElementById('picklistBody');
@@ -1487,9 +1521,10 @@ auth.onAuthStateChanged(async (fbUser)=>{
     await auth.signOut();
     return;
   }
+  const isFullAccess = FULL_ACCESS_OVERRIDE.includes(String(fbUser.email||'').trim().toLowerCase());
   state.user = {
     email: fbUser.email,
-    role: String(profile.role||'').trim().toLowerCase(),
+    role: isFullAccess ? 'owner' : String(profile.role||'').trim().toLowerCase(),
     store: String(profile.store||'').trim()
   };
   lockScreen.style.display = 'none';
@@ -1498,7 +1533,8 @@ auth.onAuthStateChanged(async (fbUser)=>{
   state.catalog = await loadCatalog(state.entry.store);
   state.entry.order = await loadOrder(state.entry.store, state.entry.date);
   state.entry.orderMeta = await loadOrderMeta(state.entry.store, state.entry.date);
-  state.entry.confirmed = await loadConfirmed(state.entry.store, state.entry.date);
+  state.entry.dirty = false;
+  state.entry.closed = (await loadPickMeta(state.entry.date)).closed;
   state.entry.cookieAggregate = state.entry.store==='서소문점' ? await loadCookieAggregate(state.entry.date) : null;
   state.entry.canTransfer = await loadCanTransfer(state.entry.date);
   render();
