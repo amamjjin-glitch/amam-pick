@@ -287,8 +287,12 @@
 
   @media (max-width:480px){
     #app{ zoom:0.9; }
-    .item-row{ flex-wrap:wrap; }
+    .item-row{ flex-wrap:wrap; row-gap:8px; }
     .item-row .name{ flex:1 1 100%; margin-bottom:4px; }
+    .qtybox input{ width:52px; font-size:16px; }
+    .pricebox, .unitbox, .destbox{ margin-left:auto; }
+    .pricebox input, .unitbox input, .destbox input{ width:118px; font-size:16px; }
+    .linetotal{ width:auto; min-width:70px; font-size:15px; }
     main{ padding:16px 6px 0; }
     .picklist-storehead{ font-size:11px; padding:8px 3px; }
     .picklist-catrow-head{ font-size:12px; padding:7px 6px 7px 8px; }
