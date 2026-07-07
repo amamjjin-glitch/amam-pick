@@ -189,6 +189,15 @@
   .linetotal{ width:84px; text-align:right; font-size:14px; font-weight:700; }
   .rmbtn{ background:none; border:none; color:var(--ink-soft); font-size:16px; cursor:pointer; padding:2px 4px; }
   .rmbtn:hover{ color:var(--stamp); }
+  .reorderbox{ display:flex; flex-direction:column; gap:0; }
+  .reorderbox button{
+    display:flex; align-items:center; justify-content:center;
+    width:20px; height:15px; border:none; background:none;
+    cursor:pointer; color:var(--ink-soft); padding:0;
+  }
+  .reorderbox button:hover:not(:disabled){ color:var(--ink); }
+  .reorderbox button:disabled{ opacity:0.25; cursor:default; }
+  .reorderbox svg{ width:10px; height:10px; display:block; }
 
   .additem{ display:flex; gap:6px; margin-top:14px; }
   .additem input{
@@ -306,7 +315,7 @@
   @media (max-width:480px){
     .item-row{ flex-wrap:wrap; row-gap:8px; }
     .item-row .name{ flex:1 1 100%; margin-bottom:4px; }
-    .qtybox input{ width:150px; font-size:16px; }
+    .qtybox input{ width:115px; font-size:16px; }
     .pricebox, .unitbox, .destbox{ margin-left:auto; }
     .pricebox input, .unitbox input, .destbox input{ width:118px; font-size:16px; }
     .linetotal{ width:auto; min-width:70px; font-size:15px; }
@@ -318,17 +327,48 @@
     .picklist-subitem{ padding-left:6px; font-size:10px; }
   }
 
+  @page{ size: 215mm 330mm; margin: 6mm; }
   @media print{
+    *{ -webkit-print-color-adjust:exact; print-color-adjust:exact; color-adjust:exact; }
     header.top, nav.tabs, .datebar, .print-btn, .toast, #lockScreen{ display:none !important; }
     body{ background:#fff; }
     #app{ max-width:none; padding:0; }
     main{ padding:0; }
     .print-only{ display:block; }
-    .picklist-storehead{ font-size:13px; }
-    .picklist-catrow-head{ font-size:13px; }
-    .picklist-cell{ font-size:12px; }
-    .picklist-subitem{ font-size:11px; }
-    .card, .canbox, .picklist-maingrid, .transfer-dest-block{ break-inside:avoid; }
+
+    .print-title{ font-size:20px; }
+    .print-sub{ font-size:14px; margin-top:3px; }
+    .print-header{ margin:0 0 10px; }
+
+    .card{ padding:6px 8px; margin-bottom:8px; border-radius:0; border-color:#ccc; }
+    .cardhead{ position:static; box-shadow:none; margin-bottom:5px; padding-bottom:3px; }
+    .cardhead h2{ font-size:15px; }
+    .cardhead h2.cat-title-lg{ font-size:17px; }
+    .cardhead .subtotal{ font-size:15px; }
+
+    .picklist-maingrid{ border-radius:0; gap:0; background:none; border:4px solid var(--line-strong); border-right:none; }
+    .picklist-storehead{ font-size:20px; padding:6px 3px; border-right:4px solid var(--line-strong); }
+    .picklist-catrow-head{ font-size:15px; padding:6px 6px; }
+    .picklist-cell{
+      font-size:17px; padding:7px 5px; gap:3px; min-height:1.4em;
+      border-bottom:1px solid var(--line-strong);
+      border-right:4px solid var(--line-strong);
+    }
+    .picklist-cell span:last-child{
+      border-left:1px solid var(--line-strong); padding-left:6px;
+      min-width:30px; text-align:right; flex-shrink:0;
+    }
+    .picklist-desttag{ font-size:13px; }
+    .picklist-subitem{ padding-left:7px; font-size:13px; }
+    .picklist-item{ font-size:16px; padding:5px 0; }
+    .picklist-summary{ gap:8px; margin-top:10px; grid-template-columns:repeat(auto-fit, minmax(140px,1fr)); }
+
+    .transfer-dest-block{ margin-bottom:8px; }
+    .transfer-dest-head{ font-size:14px; padding:4px 6px; margin-bottom:4px; }
+
+    .canbox{ gap:4px; }
+    .canbox input{ width:46px; font-size:14px; padding:2px; }
+    .canbox .unit-label{ font-size:14px; }
   }
 </style>
 </head>
@@ -406,8 +446,12 @@ window.storage = {
 const STORES = ['서울점','서소문점','광화문점','문래점','제조실점'];
 const CLOSE_ADMINS = ['oneday@amam.pick'];
 const FULL_ACCESS_OVERRIDE = ['oneday@amam.pick'];
+const MONEY_VIEWERS = ['oneday@amam.pick', 'owner@amam.pick'];
 function canManageClose(){
   return !!(state.user && CLOSE_ADMINS.includes(String(state.user.email||'').trim().toLowerCase()));
+}
+function canViewMoney(){
+  return !!(state.user && MONEY_VIEWERS.includes(String(state.user.email||'').trim().toLowerCase()));
 }
 const CATS = [
   {key:'salad', label:'샐러드 발주', color:'var(--c-salad)', bg:'var(--c-salad-bg)'},
@@ -530,6 +574,21 @@ function markDirty(){
 window.addEventListener('beforeunload', (e)=>{
   if(state.entry.dirty){ e.preventDefault(); e.returnValue = ''; }
 });
+window.addEventListener('beforeprint', ()=>{
+  const area = document.getElementById('printArea');
+  if(!area) return;
+  area.style.zoom = '';
+  const rect = area.getBoundingClientRect();
+  const PX_PER_MM = 96/25.4;
+  const usableW = (215-12) * PX_PER_MM;
+  const usableH = (330-12) * PX_PER_MM;
+  const scale = Math.min(1, usableW/rect.width, usableH/rect.height);
+  area.style.zoom = scale < 1 ? String(scale) : '';
+});
+window.addEventListener('afterprint', ()=>{
+  const area = document.getElementById('printArea');
+  if(area) area.style.zoom = '';
+});
 function checkNotClosed(){
   if(state.entry.closed){
     alert('이미 마감이 되었습니다. 발주를 변경하려면 출고내역에서 마감 취소를 눌러주세요.');
@@ -647,7 +706,7 @@ function renderEntry(main){
     }
 
     const items = state.catalog[cat.key];
-    let itemRows = items.map(it=>{
+    let itemRows = items.map((it, idx)=>{
       const rec = orderCat[it.name] || {qty:0, price: it.price||0, unit: it.unit||''};
       let rightBox;
       if(field==='unit'){
@@ -660,23 +719,27 @@ function renderEntry(main){
         rightBox = `
           <div class="unitbox">
             <input class="unit-input" type="text" placeholder="단위" value="${escAttr(rec.unit||'')}">
-          </div>
+          </div>` + (canViewMoney() ? `
           <div class="pricebox">
             <input class="price-input" type="text" inputmode="numeric" value="${fmtWon(rec.price||0)}">
             <span class="won">원</span>
           </div>
-          <div class="linetotal mono">${lt>0? fmtWon(lt):''}</div>`;
+          <div class="linetotal mono">${lt>0? fmtWon(lt):''}</div>` : '');
       } else {
         const lt = (Number(rec.qty)||0)*(Number(rec.price)||0);
-        rightBox = `
+        rightBox = canViewMoney() ? `
           <div class="pricebox">
             <input class="price-input" type="text" inputmode="numeric" value="${fmtWon(rec.price||0)}">
             <span class="won">원</span>
           </div>
-          <div class="linetotal mono">${lt>0? fmtWon(lt):''}</div>`;
+          <div class="linetotal mono">${lt>0? fmtWon(lt):''}</div>` : '';
       }
       return `
-        <div class="item-row" data-item="${escAttr(it.name)}">
+        <div class="item-row" data-item="${escAttr(it.name)}" data-idx="${idx}">
+          <div class="reorderbox">
+            <button class="move-up" title="위로" ${idx===0?'disabled':''}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 15 12 9 18 15"></polyline></svg></button>
+            <button class="move-down" title="아래로" ${idx===items.length-1?'disabled':''}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg></button>
+          </div>
           <div class="name">${esc(it.name)}</div>
           <div class="qtybox">
             <button class="qty-dec">−</button>
@@ -695,7 +758,7 @@ function renderEntry(main){
       <div class="card" id="sec-${cat.key}" data-cat="${cat.key}">
         <div class="cardhead">
           <h2 class="cat-title-lg" style="color:${cat.color}">${cat.label}</h2>
-          ${(field==='price'||field==='unitprice') ? `<div class="subtotal mono" style="color:${cat.color}">${fmtWon(subtotal)}원</div>` : ''}
+          ${(field==='price'||field==='unitprice') && canViewMoney() ? `<div class="subtotal mono" style="color:${cat.color}">${fmtWon(subtotal)}원</div>` : ''}
         </div>
         <div class="itemlist">${itemRows}</div>
         <div class="additem">
@@ -767,7 +830,7 @@ function renderEntry(main){
     <div class="storebar">
       <div class="storebar-info">
         <span class="lbl">${esc(state.entry.store)} · ${fmtDateLabel(state.entry.date)} 발주 합계</span>
-        <span class="amt mono">${fmtWon(total)}원</span>
+        ${canViewMoney() ? `<span class="amt mono">${fmtWon(total)}원</span>` : ''}
       </div>
       <button id="confirmSaveBtn" class="save-btn ${(!state.entry.dirty||state.entry.closed)?'saved':''}">${state.entry.closed ? '마감됨 🔒' : (state.entry.dirty ? '저장' : '저장됨 ✓')}</button>
     </div>
@@ -870,7 +933,11 @@ function renderEntry(main){
           if(catItem && catItem.unit !== unit){ catItem.unit = unit; await saveCatalog(); }
         } else if(field==='unitprice'){
           const unit = unitInput.value.trim();
-          const price = Math.max(0, parseInt(digitsOnly(priceInput.value))||0);
+          const existingPrice = (state.entry.order[catKey][name]||{}).price ?? (state.catalog[catKey].find(x=>x.name===name)||{}).price ?? 0;
+          let price = priceInput ? Math.max(0, parseInt(digitsOnly(priceInput.value))||0) : existingPrice;
+          if(priceInput && price !== existingPrice){
+            if(!confirm('가격을 변경하시겠습니까?')){ price = existingPrice; priceInput.value = fmtWon(existingPrice); }
+          }
           if(qty>0 || unit || price>0){ state.entry.order[catKey][name] = {qty, unit, price}; }
           else { delete state.entry.order[catKey][name]; }
           const catItem = state.catalog[catKey].find(x=>x.name===name);
@@ -878,7 +945,11 @@ function renderEntry(main){
             catItem.price = price; catItem.unit = unit; await saveCatalog();
           }
         } else {
-          const price = Math.max(0, parseInt(digitsOnly(priceInput.value))||0);
+          const existingPrice = (state.entry.order[catKey][name]||{}).price ?? (state.catalog[catKey].find(x=>x.name===name)||{}).price ?? 0;
+          let price = priceInput ? Math.max(0, parseInt(digitsOnly(priceInput.value))||0) : existingPrice;
+          if(priceInput && price !== existingPrice){
+            if(!confirm('가격을 변경하시겠습니까?')){ price = existingPrice; priceInput.value = fmtWon(existingPrice); }
+          }
           if(qty>0){ state.entry.order[catKey][name] = {qty, price}; }
           else { delete state.entry.order[catKey][name]; }
           const catItem = state.catalog[catKey].find(x=>x.name===name);
@@ -905,6 +976,23 @@ function renderEntry(main){
         await saveCatalog();
         if(state.entry.order[catKey]) delete state.entry.order[catKey][name];
         markDirty();
+        render();
+      };
+      const idx = Number(row.dataset.idx);
+      const moveUpBtn = row.querySelector('.move-up');
+      const moveDownBtn = row.querySelector('.move-down');
+      if(moveUpBtn) moveUpBtn.onclick = async ()=>{
+        if(idx<=0) return;
+        const list = state.catalog[catKey];
+        [list[idx-1], list[idx]] = [list[idx], list[idx-1]];
+        await saveCatalog();
+        render();
+      };
+      if(moveDownBtn) moveDownBtn.onclick = async ()=>{
+        const list = state.catalog[catKey];
+        if(idx>=list.length-1) return;
+        [list[idx+1], list[idx]] = [list[idx], list[idx+1]];
+        await saveCatalog();
         render();
       };
     });
@@ -1071,11 +1159,13 @@ function renderPicklist(main){
         <button id="printBtn" class="print-btn">🖨 인쇄</button>
       </div>
     </div>
-    <div class="print-only print-header">
-      <div class="print-title">${fmtDateLabel(state.daily.date)} 출고 내역</div>
-      <div class="print-sub">작성자: ${esc(meta.author||'-')} · 마감시간: ${esc(meta.time||'-')}</div>
+    <div id="printArea">
+      <div class="print-only print-header">
+        <div class="print-title">${fmtDateLabel(state.daily.date)} 출고 내역</div>
+        <div class="print-sub">작성자: ${esc(meta.author||'-')} · 마감시간: ${esc(meta.time||'-')}</div>
+      </div>
+      <div id="picklistBody"></div>
     </div>
-    <div id="picklistBody"></div>
   `;
   document.getElementById('printBtn').onclick = ()=> window.print();
   document.getElementById('dPick').onchange = (e)=>{ state.daily.date=e.target.value; state.daily.data=null; render(); };
