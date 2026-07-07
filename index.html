@@ -703,6 +703,7 @@ function renderEntry(main){
   const entryCats = CATS.filter(cat=>{
     if((cat.key==='salad' || cat.key==='cookie') && state.entry.store==='제조실점') return false;
     if(cat.key==='seoulwarehouse' && state.entry.store!=='서울점') return false;
+    if((cat.key==='produce' || cat.key==='payment') && state.entry.store==='문래점') return false;
     return true;
   });
   const sections = entryCats.map(cat=>{
