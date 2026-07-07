@@ -158,6 +158,7 @@
   }
   .item-row:last-of-type{ border-bottom:none; }
   .item-row .name{ flex:1 1 auto; font-size:15px; font-weight:600; min-width:0; overflow:hidden; text-overflow:ellipsis; }
+  .row-top, .row-bottom{ display:contents; }
   .qtybox{ display:flex; align-items:center; gap:4px; }
   .qtybox button{
     width:26px; height:26px; border-radius:6px; border:1px solid var(--line-strong);
@@ -315,19 +316,19 @@
   }
 
   @media (max-width:480px){
-    .item-row{ flex-wrap:wrap; row-gap:8px; align-items:center; }
-    .reorderbox{ order:1; }
-    .item-row .name{ order:2; flex:0 1 auto; margin-left:6px; margin-bottom:0; }
-    .qtybox{ order:3; margin-left:auto; }
-    .pricebox, .unitbox, .destbox{ order:4; }
-    .linetotal{ order:5; }
+    .item-row{ flex-wrap:wrap; row-gap:6px; }
+    .row-top, .row-bottom{ display:flex; align-items:center; width:100%; }
+    .row-top{ gap:6px; }
+    .row-bottom{ gap:0; }
+    .item-row .name{ flex:1 1 auto; margin-bottom:0; }
+    .qtybox{ margin-left:auto; }
     .qtybox input{ width:50px; font-size:16px; }
     body.money-hidden .qtybox input{ width:115px; }
-    .pricebox, .unitbox, .destbox{ margin-left:auto; }
+    .pricebox, .unitbox, .destbox{ margin-left:6px; }
     .pricebox input, .unitbox input, .destbox input{ width:90px; font-size:16px; }
     .linetotal{ width:auto; min-width:70px; font-size:15px; }
-    .item-row > .rmbtn.del-item{
-      order:6; display:inline-block; margin-left:6px; opacity:0.3; color:var(--ink-soft); font-size:14px;
+    .item-row .rmbtn.del-item{
+      display:inline-block; margin-left:6px; opacity:0.3; color:var(--ink-soft); font-size:14px;
     }
     main{ padding:16px 6px 0; }
     .picklist-storehead{ font-size:11px; padding:8px 3px; }
@@ -746,11 +747,14 @@ function renderEntry(main){
       }
       return `
         <div class="item-row" data-item="${escAttr(it.name)}" data-idx="${idx}">
-          <div class="reorderbox">
-            <button class="move-up" title="위로" ${idx===0?'disabled':''}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 15 12 9 18 15"></polyline></svg></button>
-            <button class="move-down" title="아래로" ${idx===items.length-1?'disabled':''}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg></button>
+          <div class="row-top">
+            <div class="reorderbox">
+              <button class="move-up" title="위로" ${idx===0?'disabled':''}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 15 12 9 18 15"></polyline></svg></button>
+              <button class="move-down" title="아래로" ${idx===items.length-1?'disabled':''}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg></button>
+            </div>
+            <div class="name">${esc(it.name)}</div>
           </div>
-          <div class="name">${esc(it.name)}</div>
+          <div class="row-bottom">
           <div class="qtybox">
             <button class="qty-dec">−</button>
             <input class="qty-input" type="number" min="0" value="${rec.qty||0}">
@@ -758,6 +762,7 @@ function renderEntry(main){
           </div>
           ${rightBox}
           <button class="rmbtn del-item" title="품목 삭제">✕</button>
+          </div>
         </div>`;
     }).join('');
     if(items.length===0){
