@@ -192,6 +192,20 @@
   .linetotal{ width:84px; text-align:right; font-size:14px; font-weight:700; }
   .rmbtn{ background:none; border:none; color:var(--ink-soft); font-size:16px; cursor:pointer; padding:2px 4px; }
   .rmbtn:hover{ color:var(--stamp); }
+  .grouppay-row{
+    display:flex; align-items:center; gap:8px; padding:12px 0; flex-wrap:wrap;
+    border-bottom:1px dashed var(--line);
+  }
+  .grouppay-row:last-of-type{ border-bottom:none; }
+  .grouppay-row input, .grouppay-row select{
+    border:1px solid var(--line-strong); border-radius:6px; padding:7px 9px;
+    font-size:14px; font-family:inherit; background:var(--white); color:var(--ink);
+  }
+  .grouppay-row .gp-name{ flex:1 1 110px; min-width:0; font-weight:600; }
+  .grouppay-row .gp-paydate{ flex:0 0 auto; }
+  .grouppay-row select.gp-method{ flex:0 0 auto; cursor:pointer; }
+  .grouppay-row select.gp-status{ font-weight:700; cursor:pointer; }
+  .grouppay-empty{ font-size:14px; color:var(--ink-soft); padding:14px 0; text-align:center; }
   .reorderbox{ display:flex; flex-direction:column; gap:0; }
   .reorderbox button{
     display:flex; align-items:center; justify-content:center;
@@ -246,6 +260,14 @@
   details.storedetail{ margin-top:8px; }
   details.storedetail summary{ cursor:pointer; font-size:13px; color:var(--brand); font-weight:700; }
   details.storedetail .detailbody{ padding:8px 0 0 4px; font-size:13px; color:var(--ink-soft); }
+
+  .daily-report .stamp-total{ margin-bottom:32px; }
+  .daily-report .card{ margin-bottom:32px; }
+  .daily-report table.report th, .daily-report table.report td{ padding:17px 8px; }
+  .daily-report details.storedetail{ margin-top:14px; margin-bottom:6px; }
+  .daily-report .picklist-item{ padding:10px 0; }
+  .daily-report .transfer-dest-block{ margin-bottom:28px; }
+  .daily-report .transfer-dest-head{ margin-bottom:14px; }
   details.storedetail .detailbody div{ display:flex; justify-content:space-between; padding:2px 0; }
 
   /* picklist (출고 내역) — 스프레드시트처럼 매장 열이 서로 줄이 맞도록 하나의 그리드로 구성 */
@@ -500,10 +522,18 @@ const STORE_COLORS = {
 // 출고 내역에서 문래점·제조실점 열을 구분하는 배경 — 다른 매장보다 살짝 눈에 띄는 정도로
 const PICKLIST_STORE_BG = {
   '서울점': '#F8FBF9',
-  '서소문점': '#F8FAFC',
+  '서소문점': '#FBEAF0',
   '광화문점': '#FDF8F6',
   '문래점': '#F5F0FA',
   '제조실점': '#FFF8DF',
+};
+// 주간·월별 통계 "일자별 추이" 표 전용 — 픽리스트보다 한 단계 더 옅게
+const TREND_STORE_BG = {
+  '서울점': '#FBFDFC',
+  '서소문점': '#FDF5F8',
+  '광화문점': '#FEFBF9',
+  '문래점': '#FAF8FD',
+  '제조실점': '#FFFDF3',
 };
 // 출고 내역 카테고리 제목 줄 배경 — 발주 입력보다 옅게, 그래도 구분은 되게
 const PICKLIST_CAT_BG = {
@@ -542,9 +572,9 @@ const state = {
   catalog: null,
   user: null,
   tab: 'entry',
-  entry: { store: STORES[0], date: todayStr(), cat: 'salad', order: {}, canTransfer: {out:{}, in:{}}, orderMeta: null, dirty: false, cookieAggregate: null, closed: false },
-  daily: { date: todayStr(), data: null, meta: {author:'', time:'', closed:false}, canTransfer: {out:{}, in:{}}, cookieTransfer: {out:{}, in:{}}, loading:false },
-  stats: { mode:'week', anchor: todayStr(), store:'all', data: null, loading:false },
+  entry: { store: STORES[0], date: todayStr(), cat: 'salad', order: {}, canTransfer: {out:{}, in:{}}, orderMeta: null, dirty: false, cookieAggregate: null, closed: false, groupPay: [] },
+  daily: { date: todayStr(), data: null, meta: {author:'', time:'', closed:false}, canTransfer: {out:{}, in:{}}, cookieTransfer: {out:{}, in:{}}, groupPay: {}, loading:false },
+  stats: { mode:'week', anchor: todayStr(), store:'all', data: null, loading:false, customStart: todayStr(), customEnd: todayStr() },
 };
 
 // ---------- storage helpers ----------
@@ -662,6 +692,7 @@ async function switchEntryDate(store, date){
   state.entry.dirty = false;
   state.entry.closed = (await loadPickMeta(date)).closed;
   state.entry.cookieAggregate = store==='서소문점' ? await loadCookieAggregate(date) : null;
+  state.entry.groupPay = GROUP_PAY_STORES.includes(store) ? await loadGroupPay(store, date) : [];
   render();
 }
 function digitsOnly(v){ return String(v||'').replace(/[^\d]/g,''); }
@@ -805,6 +836,36 @@ function renderEntry(main){
       ${entryCanCard('in', '캔 입고 (광화문·서소문·제조실 입고)')}
     </div>` : '';
 
+  const groupPaySection = GROUP_PAY_STORES.includes(state.entry.store) ? `
+    <div class="card">
+      <div class="cardhead"><h2>단체 결제</h2></div>
+      <div id="groupPayList">
+        ${(state.entry.groupPay||[]).length===0 ? `<div class="grouppay-empty">등록된 단체 결제가 없습니다.</div>` :
+          state.entry.groupPay.map((g,idx)=>`
+          <div class="grouppay-row" data-idx="${idx}">
+            <input class="gp-name" type="text" placeholder="단체명" value="${escAttr(g.name||'')}">
+            ${canViewMoney() ? `
+            <div class="pricebox">
+              <input class="gp-amount" type="text" inputmode="numeric" value="${g.amount? fmtWon(g.amount):''}">
+              <span class="won">원</span>
+            </div>` : ''}
+            <input class="gp-paydate" type="date" value="${escAttr(g.payDate||'')}" title="결제일">
+            <select class="gp-method">
+              <option value="" ${!g.method?'selected':''}>결제방법 선택</option>
+              ${GROUP_PAY_METHODS.map(m=>`<option value="${escAttr(m)}" ${g.method===m?'selected':''}>${esc(m)}</option>`).join('')}
+            </select>
+            <select class="gp-status" style="color:${g.status==='complete'?'#2E7D46':'#B23B3B'}">
+              <option value="incomplete" ${g.status!=='complete'?'selected':''}>미결</option>
+              <option value="complete" ${g.status==='complete'?'selected':''}>완결</option>
+            </select>
+            <button class="rmbtn gp-del" title="삭제">✕</button>
+          </div>`).join('')}
+      </div>
+      <div class="additem">
+        <button class="addGroupPayBtn" style="margin-left:auto;">+ 단체 추가</button>
+      </div>
+    </div>` : '';
+
   const cookieAggSection = state.entry.cookieAggregate ? `
     <div class="card">
       <div class="cardhead"><h2 style="color:var(--c-cookie)">전 지점 쿠키 발주 합계</h2></div>
@@ -841,6 +902,7 @@ function renderEntry(main){
     </div>
     ${sections}
     ${cookieAggSection}
+    ${groupPaySection}
     ${canSection}
     <div class="storebar">
       <div class="storebar-info">
@@ -871,6 +933,47 @@ function renderEntry(main){
       render();
     };
   });
+
+  const commitGroupPay = ()=>{
+    saveGroupPay(state.entry.store, state.entry.date, state.entry.groupPay);
+    markDirty();
+  };
+  main.querySelectorAll('.grouppay-row').forEach(row=>{
+    const idx = Number(row.dataset.idx);
+    const g = state.entry.groupPay[idx];
+    const nameInput = row.querySelector('.gp-name');
+    const amountInput = row.querySelector('.gp-amount');
+    const payDateInput = row.querySelector('.gp-paydate');
+    const methodSelect = row.querySelector('.gp-method');
+    const statusSelect = row.querySelector('.gp-status');
+    nameInput.onchange = ()=>{ g.name = nameInput.value.trim(); commitGroupPay(); render(); };
+    if(amountInput){
+      amountInput.oninput = ()=>{
+        const dg = digitsOnly(amountInput.value);
+        amountInput.value = dg ? Number(dg).toLocaleString('ko-KR') : '';
+      };
+      amountInput.onchange = ()=>{
+        g.amount = Math.max(0, parseInt(digitsOnly(amountInput.value))||0);
+        commitGroupPay();
+        render();
+      };
+    }
+    payDateInput.onchange = ()=>{ g.payDate = payDateInput.value; commitGroupPay(); render(); };
+    methodSelect.onchange = ()=>{ g.method = methodSelect.value; commitGroupPay(); render(); };
+    statusSelect.onchange = ()=>{ g.status = statusSelect.value; commitGroupPay(); render(); };
+    row.querySelector('.gp-del').onclick = ()=>{
+      if(!confirm('이 단체 결제 항목을 삭제할까요?')) return;
+      state.entry.groupPay.splice(idx,1);
+      commitGroupPay();
+      render();
+    };
+  });
+  const addGroupPayBtn = document.querySelector('.addGroupPayBtn');
+  if(addGroupPayBtn) addGroupPayBtn.onclick = ()=>{
+    state.entry.groupPay.push({name:'', amount:0, method:'', status:'incomplete', payDate:''});
+    commitGroupPay();
+    render();
+  };
 
   main.querySelectorAll('#storePills .pill').forEach(b=> b.onclick = ()=> switchEntryDate(b.dataset.store, state.entry.date));
   document.getElementById('dPick').onchange = (e)=> switchEntryDate(state.entry.store, e.target.value);
@@ -1033,6 +1136,20 @@ async function loadPickMeta(date){
 async function savePickMeta(date, meta){
   try{ await window.storage.set(`picklist_meta:${date}`, JSON.stringify(meta), true); }catch(e){}
 }
+const GROUP_PAY_STORES = STORES.filter(s=> s!=='문래점' && s!=='제조실점');
+async function loadGroupPay(store, date){
+  try{
+    const res = await window.storage.get(`grouppay:${store}:${date}`, true);
+    return JSON.parse(res.value);
+  }catch(e){ return []; }
+}
+async function saveGroupPay(store, date, list){
+  try{ await window.storage.set(`grouppay:${store}:${date}`, JSON.stringify(list), true); }catch(e){}
+}
+function groupPayTotal(list){
+  return (list||[]).reduce((sum,g)=> sum + (g.status==='complete' ? (Number(g.amount)||0) : 0), 0);
+}
+const GROUP_PAY_METHODS = ['카드리더기','세금계산서','계좌이체','매장결제'];
 const CAN_DESTS = ['광화문점','서소문점','제조실점'];
 async function loadCanTransfer(date){
   try{
@@ -1077,6 +1194,10 @@ async function loadDailyData(date){
   state.daily.meta = await loadPickMeta(date);
   state.daily.canTransfer = await loadCanTransfer(date);
   state.daily.cookieTransfer = await loadCookieTransfer(date);
+  const gpStores = GROUP_PAY_STORES.filter(s=> visibleStores().includes(s));
+  const groupPay = {};
+  await Promise.all(gpStores.map(async s=>{ groupPay[s] = await loadGroupPay(s, date); }));
+  state.daily.groupPay = groupPay;
   state.daily.loading = false;
   render();
 }
@@ -1123,17 +1244,40 @@ function renderDaily(main){
     </td></tr>
   `).join('');
 
-  body.innerHTML = `
-    <div class="stamp-total">
-      <div class="cap">${fmtDateLabel(state.daily.date)} · ${state.user.role==='manager' ? esc(state.user.store)+' 발주액' : '전 매장 총 발주액'}</div>
-      <div class="num mono">${fmtWon(grand)}원</div>
-    </div>
+  const gpStores = Object.keys(state.daily.groupPay||{});
+  const groupPayGrand = gpStores.reduce((sum,s)=> sum + groupPayTotal(state.daily.groupPay[s]), 0);
+  const groupPaySection = gpStores.length>0 ? `
     <div class="card">
-      <table class="report">
-        <thead><tr><th>매장</th>${MONEY_CATS.map(c=>`<th>${c.label.replace(' 발주','').replace('요청','')}</th>`).join('')}<th>합계</th></tr></thead>
-        <tbody>${rows}</tbody>
-        <tfoot><tr><td>전체</td>${MONEY_CAT_KEYS.map(k=>`<td class="mono">${fmtWon(catTotals[k])}</td>`).join('')}<td class="mono">${fmtWon(grand)}</td></tr></tfoot>
-      </table>
+      <div class="cardhead"><h2>단체 결제 합계</h2><div class="subtotal mono">${fmtWon(groupPayGrand)}원</div></div>
+      ${gpStores.map(s=>{
+        const list = state.daily.groupPay[s]||[];
+        if(list.length===0) return '';
+        return `
+        <div class="transfer-dest-block">
+          <div class="transfer-dest-head">${esc(s)} (${fmtWon(groupPayTotal(list))}원)</div>
+          ${list.map(g=>`
+            <div class="picklist-item">
+              <span>${esc(g.name||'(이름 없음)')} ${g.method?`· ${esc(g.method)}`:''} ${g.payDate?`· ${esc(fmtDateLabel(g.payDate))}`:''} <span style="color:${g.status==='complete'?'#2E7D46':'#B23B3B'}; font-weight:700;">[${g.status==='complete'?'완결':'미결'}]</span></span>
+              <span class="mono">${fmtWon(g.amount||0)}원</span>
+            </div>`).join('')}
+        </div>`;
+      }).join('')}
+    </div>` : '';
+
+  body.innerHTML = `
+    <div class="daily-report">
+      <div class="stamp-total">
+        <div class="cap">${fmtDateLabel(state.daily.date)} · ${state.user.role==='manager' ? esc(state.user.store)+' 발주액' : '전 매장 총 발주액'}</div>
+        <div class="num mono">${fmtWon(grand)}원</div>
+      </div>
+      <div class="card">
+        <table class="report">
+          <thead><tr><th>매장</th>${MONEY_CATS.map(c=>`<th>${c.label.replace(' 발주','').replace('요청','')}</th>`).join('')}<th>합계</th></tr></thead>
+          <tbody>${rows}</tbody>
+          <tfoot><tr><td>전체</td>${MONEY_CAT_KEYS.map(k=>`<td class="mono">${fmtWon(catTotals[k])}</td>`).join('')}<td class="mono">${fmtWon(grand)}</td></tr></tfoot>
+        </table>
+      </div>
+      ${groupPaySection}
     </div>
   `;
 }
@@ -1458,6 +1602,15 @@ function renderPicklist(main){
 
 // ---------- STATS TAB ----------
 function statsRange(){
+  if(state.stats.mode==='custom'){
+    const start = parseDate(state.stats.customStart);
+    const end = parseDate(state.stats.customEnd);
+    const dates = [];
+    if(end >= start){
+      for(let d=new Date(start); d<=end; d=addDays(d,1)) dates.push(todayStr(d));
+    }
+    return {dates, label: dates.length ? `${fmtDateLabel(dates[0])}~${fmtDateLabel(dates[dates.length-1])}` : '기간을 확인해주세요'};
+  }
   const anchor = parseDate(state.stats.anchor);
   if(state.stats.mode==='week'){
     const mon = getMonday(anchor);
@@ -1496,7 +1649,25 @@ async function loadStatsData(){
       storeTotals[s]+=t; grand+=t;
     }catch(e){}
   }));
-  state.stats.data = {dates, dataByDate, catTotals, storeTotals, grand, storesToLoad};
+
+  const gpStoresToLoad = storesToLoad.filter(s=> GROUP_PAY_STORES.includes(s));
+  let listResGp;
+  try{ listResGp = await window.storage.list('grouppay:', true); }catch(e){ listResGp = {keys:[]}; }
+  const gpExistingKeys = new Set((listResGp && listResGp.keys) || []);
+  const gpWanted = [];
+  gpStoresToLoad.forEach(s=> dates.forEach(d=>{
+    const k = `grouppay:${s}:${d}`;
+    if(gpExistingKeys.has(k)) gpWanted.push(k);
+  }));
+  let groupPayGrand = 0;
+  await Promise.all(gpWanted.map(async k=>{
+    try{
+      const res = await window.storage.get(k, true);
+      groupPayGrand += groupPayTotal(JSON.parse(res.value));
+    }catch(e){}
+  }));
+
+  state.stats.data = {dates, dataByDate, catTotals, storeTotals, grand, storesToLoad, groupPayGrand};
   state.stats.loading = false;
   render();
 }
@@ -1506,39 +1677,55 @@ function renderStats(main){
     <div class="pillrow">
       <button class="pill ${state.stats.mode==='week'?'active':''}" data-mode="week">주간</button>
       <button class="pill ${state.stats.mode==='month'?'active':''}" data-mode="month">월별</button>
+      <button class="pill ${state.stats.mode==='custom'?'active':''}" data-mode="custom">기간 선택</button>
     </div>
     ${state.user.role!=='manager' ? `
     <div class="pillrow" id="storeFilter">
       <button class="pill ${state.stats.store==='all'?'active':''}" data-store="all">전체 매장</button>
       ${STORES.map(s=>`<button class="pill ${state.stats.store===s?'active':''}" data-store="${escAttr(s)}">${esc(s)}</button>`).join('')}
     </div>` : ''}
+    ${state.stats.mode==='custom' ? `
+    <div class="datebar">
+      <input type="date" id="stCustomStart" value="${state.stats.customStart}">
+      <span class="label">~</span>
+      <input type="date" id="stCustomEnd" value="${state.stats.customEnd}">
+    </div>` : `
     <div class="datebar">
       <button class="nav" id="stPrev">‹</button>
       ${state.stats.mode==='week'
         ? `<input type="date" id="stPick" value="${state.stats.anchor}">`
         : `<input type="month" id="stPick" value="${state.stats.anchor.slice(0,7)}">`}
       <button class="nav" id="stNext">›</button>
-    </div>
+    </div>`}
     <div id="statsBody"></div>
   `;
   main.querySelectorAll('[data-mode]').forEach(b=> b.onclick=()=>{ state.stats.mode=b.dataset.mode; state.stats.data=null; render(); });
   main.querySelectorAll('#storeFilter .pill').forEach(b=> b.onclick=()=>{ state.stats.store=b.dataset.store; state.stats.data=null; render(); });
-  const stPick = document.getElementById('stPick');
-  stPick.onchange = (e)=>{
-    state.stats.anchor = state.stats.mode==='week' ? e.target.value : (e.target.value+'-01');
-    state.stats.data=null; render();
-  };
-  document.getElementById('stPrev').onclick = ()=>{
-    const step = state.stats.mode==='week' ? -7 : -30;
-    const a = parseDate(state.stats.anchor);
-    state.stats.anchor = todayStr(state.stats.mode==='week'? addDays(a,step) : new Date(a.getFullYear(),a.getMonth()-1,1));
-    state.stats.data=null; render();
-  };
-  document.getElementById('stNext').onclick = ()=>{
-    const a = parseDate(state.stats.anchor);
-    state.stats.anchor = todayStr(state.stats.mode==='week'? addDays(a,7) : new Date(a.getFullYear(),a.getMonth()+1,1));
-    state.stats.data=null; render();
-  };
+  if(state.stats.mode==='custom'){
+    document.getElementById('stCustomStart').onchange = (e)=>{
+      state.stats.customStart = e.target.value; state.stats.data=null; render();
+    };
+    document.getElementById('stCustomEnd').onchange = (e)=>{
+      state.stats.customEnd = e.target.value; state.stats.data=null; render();
+    };
+  } else {
+    const stPick = document.getElementById('stPick');
+    stPick.onchange = (e)=>{
+      state.stats.anchor = state.stats.mode==='week' ? e.target.value : (e.target.value+'-01');
+      state.stats.data=null; render();
+    };
+    document.getElementById('stPrev').onclick = ()=>{
+      const step = state.stats.mode==='week' ? -7 : -30;
+      const a = parseDate(state.stats.anchor);
+      state.stats.anchor = todayStr(state.stats.mode==='week'? addDays(a,step) : new Date(a.getFullYear(),a.getMonth()-1,1));
+      state.stats.data=null; render();
+    };
+    document.getElementById('stNext').onclick = ()=>{
+      const a = parseDate(state.stats.anchor);
+      state.stats.anchor = todayStr(state.stats.mode==='week'? addDays(a,7) : new Date(a.getFullYear(),a.getMonth()+1,1));
+      state.stats.data=null; render();
+    };
+  }
 
   const body = document.getElementById('statsBody');
   const {label} = statsRange();
@@ -1554,6 +1741,9 @@ function renderStats(main){
     <div class="stamp-total">
       <div class="cap">${esc(label)} 총 발주액</div>
       <div class="num mono">${fmtWon(d.grand)}원</div>
+    </div>
+    <div class="card">
+      <div class="cardhead"><h2>단체 결제 합계</h2><div class="subtotal mono">${fmtWon(d.groupPayGrand||0)}원</div></div>
     </div>
     <div class="card">
       <div class="cardhead"><h2>카테고리별 합계</h2></div>
@@ -1578,11 +1768,11 @@ function renderStats(main){
     <div class="card">
       <div class="cardhead"><h2>일자별 추이</h2></div>
       <table class="report">
-        <thead><tr><th>날짜</th>${d.storesToLoad.map(s=>`<th style="background:${PICKLIST_STORE_BG[s]||''}">${esc(s)}</th>`).join('')}<th>합계</th></tr></thead>
+        <thead><tr><th>날짜</th>${d.storesToLoad.map(s=>`<th style="background:${TREND_STORE_BG[s]||''}">${esc(s)}</th>`).join('')}<th>합계</th></tr></thead>
         <tbody>
           ${d.dates.map(dt=>{
             const rowTotal = d.storesToLoad.reduce((sum,s)=> sum+(d.dataByDate[dt][s]||0), 0);
-            return `<tr><td>${fmtDateLabel(dt)}</td>${d.storesToLoad.map(s=>`<td class="mono" style="background:${PICKLIST_STORE_BG[s]||''}">${fmtWon(d.dataByDate[dt][s]||0)}</td>`).join('')}<td class="mono">${fmtWon(rowTotal)}</td></tr>`;
+            return `<tr><td>${fmtDateLabel(dt)}</td>${d.storesToLoad.map(s=>`<td class="mono" style="background:${TREND_STORE_BG[s]||''}">${fmtWon(d.dataByDate[dt][s]||0)}</td>`).join('')}<td class="mono">${fmtWon(rowTotal)}</td></tr>`;
           }).join('')}
         </tbody>
       </table>
@@ -1611,6 +1801,13 @@ async function tryLogin(){
 document.getElementById('loginSubmit').onclick = tryLogin;
 document.getElementById('loginPw').addEventListener('keydown', e=>{ if(e.key==='Enter') tryLogin(); });
 document.getElementById('logoutBtn').onclick = ()=> auth.signOut();
+document.getElementById('loginEmail').addEventListener('input', function(){
+  if(this.value.endsWith('@')){
+    const pos = this.value.length;
+    this.value += 'amam.pick';
+    this.setSelectionRange(pos, pos);
+  }
+});
 
 function applyRoleRestrictions(){
   const dailyBtn = document.querySelector('nav.tabs button[data-tab="daily"]');
@@ -1668,6 +1865,7 @@ auth.onAuthStateChanged(async (fbUser)=>{
   state.entry.dirty = false;
   state.entry.closed = (await loadPickMeta(state.entry.date)).closed;
   state.entry.cookieAggregate = state.entry.store==='서소문점' ? await loadCookieAggregate(state.entry.date) : null;
+  state.entry.groupPay = GROUP_PAY_STORES.includes(state.entry.store) ? await loadGroupPay(state.entry.store, state.entry.date) : [];
   state.entry.canTransfer = await loadCanTransfer(state.entry.date);
   render();
 });
