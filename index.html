@@ -317,8 +317,8 @@
   @media (max-width:480px){
     .item-row{ flex-wrap:wrap; row-gap:8px; align-items:center; }
     .reorderbox{ order:1; }
-    .qtybox{ order:2; }
-    .item-row .name{ order:3; flex:1 1 100%; margin-bottom:4px; }
+    .item-row .name{ order:2; flex:0 1 auto; margin-left:6px; margin-bottom:0; }
+    .qtybox{ order:3; margin-left:auto; }
     .pricebox, .unitbox, .destbox{ order:4; }
     .linetotal{ order:5; }
     .qtybox input{ width:50px; font-size:16px; }
@@ -326,7 +326,9 @@
     .pricebox, .unitbox, .destbox{ margin-left:auto; }
     .pricebox input, .unitbox input, .destbox input{ width:90px; font-size:16px; }
     .linetotal{ width:auto; min-width:70px; font-size:15px; }
-    .item-row > .rmbtn.del-item{ display:none; }
+    .item-row > .rmbtn.del-item{
+      order:6; display:inline-block; margin-left:6px; opacity:0.3; color:var(--ink-soft); font-size:14px;
+    }
     main{ padding:16px 6px 0; }
     .picklist-storehead{ font-size:11px; padding:8px 3px; }
     .picklist-catrow-head{ font-size:12px; padding:7px 6px 7px 8px; }
