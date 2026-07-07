@@ -323,10 +323,10 @@
     .item-row .name{ flex:1 1 auto; margin-bottom:0; }
     .qtybox{ margin-left:auto; }
     .qtybox input{ width:50px; font-size:16px; }
-    body.money-hidden .qtybox input{ width:90px; }
+    body.money-hidden .qtybox input{ width:80px; }
     .pricebox, .unitbox, .destbox{ margin-left:6px; }
     .pricebox input, .unitbox input, .destbox input{ width:90px; font-size:16px; }
-    .linetotal{ width:auto; min-width:70px; font-size:15px; }
+    .linetotal{ width:auto; min-width:70px; font-size:15px; order:10; margin-left:6px; }
     .item-row .rmbtn.del-item{
       display:inline-block; margin-left:6px; opacity:0.3; color:var(--ink-soft); font-size:14px;
     }
@@ -1578,11 +1578,11 @@ function renderStats(main){
     <div class="card">
       <div class="cardhead"><h2>일자별 추이</h2></div>
       <table class="report">
-        <thead><tr><th>날짜</th>${d.storesToLoad.map(s=>`<th>${esc(s)}</th>`).join('')}<th>합계</th></tr></thead>
+        <thead><tr><th>날짜</th>${d.storesToLoad.map(s=>`<th style="background:${PICKLIST_STORE_BG[s]||''}">${esc(s)}</th>`).join('')}<th>합계</th></tr></thead>
         <tbody>
           ${d.dates.map(dt=>{
             const rowTotal = d.storesToLoad.reduce((sum,s)=> sum+(d.dataByDate[dt][s]||0), 0);
-            return `<tr><td>${fmtDateLabel(dt)}</td>${d.storesToLoad.map(s=>`<td class="mono">${fmtWon(d.dataByDate[dt][s]||0)}</td>`).join('')}<td class="mono">${fmtWon(rowTotal)}</td></tr>`;
+            return `<tr><td>${fmtDateLabel(dt)}</td>${d.storesToLoad.map(s=>`<td class="mono" style="background:${PICKLIST_STORE_BG[s]||''}">${fmtWon(d.dataByDate[dt][s]||0)}</td>`).join('')}<td class="mono">${fmtWon(rowTotal)}</td></tr>`;
           }).join('')}
         </tbody>
       </table>
