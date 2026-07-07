@@ -315,12 +315,18 @@
   }
 
   @media (max-width:480px){
-    .item-row{ flex-wrap:wrap; row-gap:8px; }
-    .item-row .name{ flex:1 1 100%; margin-bottom:4px; }
+    .item-row{ flex-wrap:wrap; row-gap:8px; align-items:center; }
+    .reorderbox{ order:1; }
+    .qtybox{ order:2; }
+    .item-row .name{ order:3; flex:1 1 100%; margin-bottom:4px; }
+    .pricebox, .unitbox, .destbox{ order:4; }
+    .linetotal{ order:5; }
     .qtybox input{ width:50px; font-size:16px; }
+    body.money-hidden .qtybox input{ width:115px; }
     .pricebox, .unitbox, .destbox{ margin-left:auto; }
     .pricebox input, .unitbox input, .destbox input{ width:90px; font-size:16px; }
     .linetotal{ width:auto; min-width:70px; font-size:15px; }
+    .item-row > .rmbtn.del-item{ display:none; }
     main{ padding:16px 6px 0; }
     .picklist-storehead{ font-size:11px; padding:8px 3px; }
     .picklist-catrow-head{ font-size:12px; padding:7px 6px 7px 8px; }
@@ -1606,6 +1612,7 @@ function applyRoleRestrictions(){
   if(dailyBtn) dailyBtn.style.display = hideReports ? 'none' : '';
   if(statsBtn) statsBtn.style.display = hideReports ? 'none' : '';
   document.getElementById('userWho').textContent = `${state.user.email} (${state.user.role === 'owner' ? '사장님' : state.user.role === 'manager' ? state.user.store+' 점장' : '직원'})`;
+  document.body.classList.toggle('money-hidden', !canViewMoney());
 }
 function visibleStores(){
   return state.user.role === 'manager' ? [state.user.store] : STORES;
